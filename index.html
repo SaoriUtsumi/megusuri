@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="目薬">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#e8f4fa">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>目薬タイマー</title>
+<style>
+  :root {
+    --bg: #e8f4fa; --card: #ffffff; --ink: #1d3340; --sub: #5b7482;
+    --main: #388ec8; --main-dark: #2a6f9e; --ok: #3a9a6a; --warn: #d9822b; --line: #d3e3ec;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Hiragino Sans", sans-serif; }
+  body { padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px); }
+  h1 { font-size: 18px; margin: 4px 0 12px; display: flex; justify-content: space-between; align-items: center; }
+  .card { background: var(--card); border-radius: 18px; padding: 18px; margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .session { font-size: 15px; color: var(--sub); margin-bottom: 4px; }
+  .drop { font-size: 28px; font-weight: 700; margin: 2px 0 8px; }
+  .shake { display: inline-block; background: #fff2e2; color: var(--warn); font-size: 14px;
+    font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
+  .count { font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; margin: 8px 0 2px; }
+  .at { text-align: center; color: var(--sub); font-size: 14px; margin-bottom: 12px; }
+  .due { text-align: center; color: var(--ok); font-size: 20px; font-weight: 700; margin: 10px 0 14px; }
+  button { font: inherit; border: none; border-radius: 14px; cursor: pointer; }
+  .big { width: 100%; padding: 20px 12px; font-size: 21px; font-weight: 700; color: #fff; background: var(--main); }
+  .big:active { background: var(--main-dark); }
+  .big:disabled { background: #b9cfdc; }
+  .sub { width: 100%; padding: 12px; font-size: 15px; background: #eef5f9; color: var(--main-dark); margin-top: 10px; }
+  .link { background: none; color: var(--sub); font-size: 14px; text-decoration: underline; padding: 8px; display: block; margin: 6px auto 0; }
+  .gear { background: #fff; color: var(--ink); font-size: 14px; padding: 8px 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 7px 4px; border-bottom: 1px solid var(--line); text-align: center; }
+  th:first-child, td:first-child { text-align: left; white-space: nowrap; }
+  td.done { color: var(--ok); font-weight: 700; }
+  td.na { color: #c3d2db; }
+  .cur { background: #f2f9fd; }
+  label { display: block; font-size: 14px; color: var(--sub); margin: 12px 0 4px; }
+  input[type=text], input[type=time], select { width: 100%; font-size: 17px; padding: 10px;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; font-size: 15px; }
+  .row label { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--ink); }
+  .dropset { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+  .note { font-size: 13px; color: var(--sub); line-height: 1.6; }
+  .danger { background: #fbeaea; color: #b23a3a; }
+  .hidden { display: none; }
+  .test { background: #fff2e2; color: var(--warn); font-size: 13px; padding: 6px 10px; border-radius: 10px; margin-bottom: 10px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>💧 目薬タイマー <button class="gear" id="btnSettings">設定</button></h1>
+
+<!-- メイン画面 -->
+<div id="main">
+  <div id="testBadge" class="test hidden">テストモード中（5分→10秒、4時間→1分）</div>
+  <div class="card" id="statusCard"></div>
+  <div class="card">
+    <div class="session" style="margin-bottom:8px" id="logTitle">今日の記録</div>
+    <div id="progress"></div>
+  </div>
+</div>
+
+<!-- 設定画面 -->
+<div id="settings" class="hidden">
+  <div class="card">
+    <div class="drop" style="font-size:20px">目薬</div>
+    <div class="note">上から順にさします。さす回にチェックを入れてください。</div>
+    <div id="dropEditors"></div>
+
+    <label for="bedtime">就寝前の回の時刻</label>
+    <input type="time" id="bedtime">
+    <label for="morning">明日の朝の時刻（初期値）</label>
+    <input type="time" id="morning">
+  </div>
+
+  <div class="card">
+    <div class="drop" style="font-size:20px">時計タイマー連携</div>
+    <div class="row"><label><input type="checkbox" id="useShortcut"> 承認時にショートカットで時計のタイマーをセットする</label></div>
+    <label for="shortcutName">ショートカット名</label>
+    <input type="text" id="shortcutName">
+    <button class="sub" id="btnTestShortcut">ショートカットをテスト（10秒タイマー）</button>
+  </div>
+
+  <div class="card">
+    <div class="drop" style="font-size:20px">動作確認・手動操作</div>
+    <div class="row"><label><input type="checkbox" id="testMode"> テストモード（5分→10秒、4時間→1分）</label></div>
+    <label for="manualSession">回を選んで、今すぐ始める</label>
+    <select id="manualSession"></select>
+    <button class="sub" id="btnManualStart">この回を今すぐ始める</button>
+    <button class="sub danger" id="btnReset">すべてリセット</button>
+  </div>
+
+  <button class="big" id="btnSaveSettings">保存して戻る</button>
+</div>
+
+<script>
+// ===== 定数 =====
+const SESSIONS = ['朝', '昼', '夜', '就寝前'];
+const NUM = ['①', '②', '③', '④', '⑤'];
+const KEY_SETTINGS = 'megusuri.settings.v1';
+const KEY_STATE = 'megusuri.state.v1';
+
+const DEFAULT_SETTINGS = {
+  drops: [
+    { name: 'ジクアス', ses: [true, true, true, true], shake: false },
+    { name: '目薬②',   ses: [true, true, true, true], shake: false },
+    { name: '目薬③',   ses: [true, false, false, true], shake: true },
+  ],
+  bedtime: '23:30',
+  morning: '09:15',
+  useShortcut: true,
+  shortcutName: '目薬タイマー',
+  testMode: false,
+};
+
+// phase: idle(未開始) / waitSession(次の回待ち) / waitDrop(回の途中で次の1本待ち) / dayDone(就寝前終了→朝の時刻設定)
+const DEFAULT_STATE = { phase: 'idle', session: 0, drop: 0, nextAt: 0, dayLog: [], undo: null };
+
+// ===== 保存・読み込み =====
+function load(key, def) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key));
+    return v ? Object.assign(structuredClone(def), v) : structuredClone(def);
+  } catch (e) { return structuredClone(def); }
+}
+let settings = load(KEY_SETTINGS, DEFAULT_SETTINGS);
+let state = load(KEY_STATE, DEFAULT_STATE);
+function saveSettings() { localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings)); }
+function saveState() { localStorage.setItem(KEY_STATE, JSON.stringify(state)); }
+
+// ===== 時間まわり =====
+const dropIntervalMs = () => settings.testMode ? 10e3 : 5 * 60e3;
+const sessionGapMs  = () => settings.testMode ? 60e3 : 4 * 3600e3;
+
+function hm(t) { const d = new Date(t); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function fmtLeft(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(ss).padStart(2, '0');
+}
+// 今日の指定時刻（HH:MM）のタイムスタンプ
+function todayAt(hhmm, base = Date.now()) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(base); d.setHours(h, m, 0, 0); return d.getTime();
+}
+// 次にくる指定時刻（過ぎていれば翌日）
+function nextOccurrence(hhmm) {
+  let t = todayAt(hhmm);
+  if (t <= Date.now()) t += 24 * 3600e3;
+  return t;
+}
+
+// その回にさす目薬のリスト（設定の並び順）
+function dropsOf(sessionIdx) {
+  return settings.drops.map((d, i) => ({ ...d, idx: i })).filter(d => d.ses[sessionIdx]);
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// ===== 時計タイマー（ショートカット呼び出し） =====
+function callShortcut(seconds) {
+  if (!settings.useShortcut) return;
+  const sec = Math.max(1, Math.round(seconds));
+  const url = 'shortcuts://run-shortcut?name=' + encodeURIComponent(settings.shortcutName) +
+              '&input=text&text=' + sec;
+  location.href = url;
+}
+function setNext(at) {
+  state.nextAt = at;
+  saveState();
+  render();
+  callShortcut((at - Date.now()) / 1000);
+}
+
+// ===== 承認（1本さした） =====
+function approve() {
+  const now = Date.now();
+  const snapshot = structuredClone({ ...state, undo: null });
+
+  if (state.phase === 'waitSession') {
+    if (state.session === 0) state.dayLog = [];   // 朝の1本目で1日の記録をリセット
+    state.drop = 0;
+  }
+  const list = dropsOf(state.session);
+  const cur = list[state.drop];
+  state.dayLog.push({ s: state.session, d: cur.idx, t: now });
+  state.undo = snapshot;
+
+  if (state.drop < list.length - 1) {
+    // 次の目薬まで5分
+    state.phase = 'waitDrop';
+    state.drop += 1;
+    setNext(now + dropIntervalMs());
+  } else if (state.session < 3) {
+    // 最後の1本 → 次の回まで4時間
+    const nextSession = state.session + 1;
+    let at = now + sessionGapMs();
+    if (nextSession === 3 && !settings.testMode) {
+      // 就寝前は設定時刻。ただし4時間未満なら4時間後まで遅らせる
+      const target = todayAt(settings.bedtime, now);
+      if (target - now < 12 * 3600e3) at = Math.max(at, target);
+    }
+    state.phase = 'waitSession';
+    state.session = nextSession;
+    state.drop = 0;
+    setNext(at);
+  } else {
+    // 就寝前の回が終了 → 明日の朝の時刻を決める
+    state.phase = 'dayDone';
+    state.nextAt = 0;
+    saveState();
+    render();
+  }
+}
+
+function setMorning() {
+  const v = document.getElementById('morningPick').value || settings.morning;
+  state.phase = 'waitSession';
+  state.session = 0;
+  state.drop = 0;
+  state.undo = null;
+  setNext(settings.testMode ? Date.now() + 60e3 : nextOccurrence(v));
+}
+
+function startSessionNow(sessionIdx) {
+  state.phase = 'waitSession';
+  state.session = sessionIdx;
+  state.drop = 0;
+  state.nextAt = Date.now();
+  state.undo = null;
+  saveState();
+  render();
+}
+
+function undo() {
+  if (!state.undo) return;
+  if (!confirm('直前の「さした」を取り消しますか？')) return;
+  state = Object.assign(structuredClone(DEFAULT_STATE), state.undo);
+  saveState();
+  render();
+  if (state.nextAt > Date.now()) {
+    alert('取り消しました。時計のタイマーは「時計タイマーを再セット」で合わせ直してください。');
+  }
+}
+
+// ===== 描画 =====
+function render() {
+  document.getElementById('testBadge').classList.toggle('hidden', !settings.testMode);
+  renderStatus();
+  renderProgress();
+}
+
+function renderStatus() {
+  const el = document.getElementById('statusCard');
+  const now = Date.now();
+  let h = '';
+
+  if (state.phase === 'idle') {
+    h += '<div class="drop" style="font-size:22px">はじめましょう</div>';
+    h += '<div class="note">今から始める回を選んでください。</div>';
+    h += '<select id="idleSession" style="margin:12px 0">' +
+         SESSIONS.map((s, i) => `<option value="${i}">${s}</option>`).join('') + '</select>';
+    h += '<button class="big" id="btnIdleStart">この回を始める</button>';
+  } else if (state.phase === 'dayDone') {
+    h += '<div class="session">今日の目薬はすべて終わりました 🌙</div>';
+    h += '<div class="drop" style="font-size:22px">明日の朝は何時にしますか？</div>';
+    h += `<input type="time" id="morningPick" value="${esc(settings.morning)}" style="font-size:28px;text-align:center;margin:6px 0 14px">`;
+    h += '<button class="big" id="btnSetMorning">この時刻にセット</button>';
+  } else {
+    const list = dropsOf(state.session);
+    const cur = list[state.drop];
+    const due = now >= state.nextAt;
+    const label = state.phase === 'waitSession' ? `${SESSIONS[state.session]}の回` : `${SESSIONS[state.session]}の回（${state.drop + 1}本目 / ${list.length}本）`;
+    h += `<div class="session">${label}</div>`;
+    h += `<div class="drop">${NUM[state.drop]} ${esc(cur.name)}</div>`;
+    if (cur.shake) h += '<div class="shake">よく振ってから！</div>';
+    if (due) {
+      h += '<div class="due">今さしてください</div>';
+      h += `<button class="big" id="btnApprove">${NUM[state.drop]} ${esc(cur.name)}をさした</button>`;
+    } else {
+      h += `<div class="count" id="count">${fmtLeft(state.nextAt - now)}</div>`;
+      h += `<div class="at">${hm(state.nextAt)} になったら次をさします</div>`;
+      h += `<button class="big" disabled>${NUM[state.drop]} ${esc(cur.name)}をさした</button>`;
+      h += '<button class="link" id="btnEarly">待たずに今さす</button>';
+      h += '<button class="sub" id="btnReshortcut">時計タイマーを再セット</button>';
+    }
+    if (state.undo) h += '<button class="link" id="btnUndo">直前の「さした」を取り消す</button>';
+  }
+  el.innerHTML = h;
+  el.dataset.due = (state.phase === 'waitSession' || state.phase === 'waitDrop') && now >= state.nextAt ? '1' : '0';
+
+  const on = (id, fn) => { const b = document.getElementById(id); if (b) b.onclick = fn; };
+  on('btnApprove', approve);
+  on('btnEarly', () => { if (confirm('予定時刻の前ですが、今さしますか？')) approve(); });
+  on('btnReshortcut', () => callShortcut((state.nextAt - Date.now()) / 1000));
+  on('btnUndo', undo);
+  on('btnSetMorning', setMorning);
+  on('btnIdleStart', () => startSessionNow(Number(document.getElementById('idleSession').value)));
+}
+
+function renderProgress() {
+  const el = document.getElementById('progress');
+  // 朝の回を待っている間は、前日分の記録として表示
+  const prev = state.phase === 'waitSession' && state.session === 0 && state.dayLog.length;
+  document.getElementById('logTitle').textContent = prev ? '前回の記録' : '今日の記録';
+  const names = settings.drops.map(d => d.name);
+  let h = '<table><tr><th></th>' + names.map((n, i) => `<th>${NUM[i]}</th>`).join('') + '</tr>';
+  SESSIONS.forEach((s, si) => {
+    const active = !prev && (state.phase === 'waitSession' || state.phase === 'waitDrop') && state.session === si;
+    h += `<tr class="${active ? 'cur' : ''}"><td>${s}</td>`;
+    settings.drops.forEach((d, di) => {
+      if (!d.ses[si]) { h += '<td class="na">－</td>'; return; }
+      const rec = state.dayLog.find(r => r.s === si && r.d === di);
+      h += rec ? `<td class="done">✓ ${hm(rec.t)}</td>` : '<td></td>';
+    });
+    h += '</tr>';
+  });
+  h += '</table>';
+  h += '<div class="note" style="margin-top:8px">' + names.map((n, i) => `${NUM[i]} ${esc(n)}`).join('　') + '</div>';
+  el.innerHTML = h;
+}
+
+// 毎秒カウントダウン更新（予定時刻を過ぎたら画面を切り替え）
+setInterval(() => {
+  const el = document.getElementById('statusCard');
+  const waiting = state.phase === 'waitSession' || state.phase === 'waitDrop';
+  if (!waiting) return;
+  const due = Date.now() >= state.nextAt;
+  if (due !== (el.dataset.due === '1')) { render(); return; }
+  const c = document.getElementById('count');
+  if (c) c.textContent = fmtLeft(state.nextAt - Date.now());
+}, 1000);
+
+// ===== アプリを開いている間の再通知音 =====
+let audioCtx = null;
+document.addEventListener('pointerdown', () => {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
+}, { passive: true });
+function chime() {
+  if (!audioCtx) return;
+  try {
+    [0, 0.25, 0.5].forEach((delay, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = [880, 1175, 1568][i];
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime + delay);
+      g.gain.exponentialRampToValueAtTime(0.3, audioCtx.currentTime + delay + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + delay + 0.4);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + delay); o.stop(audioCtx.currentTime + delay + 0.45);
+    });
+  } catch (e) {}
+}
+let lastChime = 0;
+setInterval(() => {
+  const waiting = state.phase === 'waitSession' || state.phase === 'waitDrop';
+  if (!waiting || document.hidden || Date.now() < state.nextAt) return;
+  if (Date.now() - lastChime >= 30e3) { lastChime = Date.now(); chime(); }   // 30秒おきに鳴らす
+}, 1000);
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+// ===== 設定画面 =====
+function openSettings() {
+  document.getElementById('main').classList.add('hidden');
+  document.getElementById('settings').classList.remove('hidden');
+  document.getElementById('btnSettings').classList.add('hidden');
+  const box = document.getElementById('dropEditors');
+  box.innerHTML = settings.drops.map((d, i) => `
+    <div class="dropset">
+      <label for="dn${i}">${NUM[i]} 名前</label>
+      <input type="text" id="dn${i}" value="${esc(d.name)}">
+      <div class="row">${SESSIONS.map((s, si) =>
+        `<label><input type="checkbox" id="ds${i}_${si}" ${d.ses[si] ? 'checked' : ''}> ${s}</label>`).join('')}</div>
+      <div class="row"><label><input type="checkbox" id="dk${i}" ${d.shake ? 'checked' : ''}> 「よく振って」と表示</label></div>
+    </div>`).join('');
+  document.getElementById('bedtime').value = settings.bedtime;
+  document.getElementById('morning').value = settings.morning;
+  document.getElementById('useShortcut').checked = settings.useShortcut;
+  document.getElementById('shortcutName').value = settings.shortcutName;
+  document.getElementById('testMode').checked = settings.testMode;
+  document.getElementById('manualSession').innerHTML =
+    SESSIONS.map((s, i) => `<option value="${i}">${s}</option>`).join('');
+  window.scrollTo(0, 0);
+}
+function collectSettings() {
+  settings.drops.forEach((d, i) => {
+    d.name = document.getElementById('dn' + i).value.trim() || `目薬${NUM[i]}`;
+    d.ses = SESSIONS.map((s, si) => document.getElementById(`ds${i}_${si}`).checked);
+    d.shake = document.getElementById('dk' + i).checked;
+  });
+  // どの回にも目薬が1本もない状態を防ぐ
+  for (let si = 0; si < SESSIONS.length; si++) {
+    if (!settings.drops.some(d => d.ses[si])) { alert(`${SESSIONS[si]}の回の目薬が0本です。どれかにチェックを入れてください。`); return false; }
+  }
+  settings.bedtime = document.getElementById('bedtime').value || '23:30';
+  settings.morning = document.getElementById('morning').value || '09:15';
+  settings.useShortcut = document.getElementById('useShortcut').checked;
+  settings.shortcutName = document.getElementById('shortcutName').value.trim() || '目薬タイマー';
+  settings.testMode = document.getElementById('testMode').checked;
+  saveSettings();
+  // 目薬の構成が変わって位置がずれた場合の保険
+  if (state.phase === 'waitDrop' && state.drop >= dropsOf(state.session).length) {
+    state.drop = dropsOf(state.session).length - 1;
+    saveState();
+  }
+  return true;
+}
+function closeSettings() {
+  document.getElementById('settings').classList.add('hidden');
+  document.getElementById('main').classList.remove('hidden');
+  document.getElementById('btnSettings').classList.remove('hidden');
+  render();
+  window.scrollTo(0, 0);
+}
+document.getElementById('btnSettings').onclick = openSettings;
+document.getElementById('btnSaveSettings').onclick = () => { if (collectSettings()) closeSettings(); };
+document.getElementById('btnTestShortcut').onclick = () => {
+  if (!collectSettings()) return;
+  const keep = settings.useShortcut; settings.useShortcut = true;
+  callShortcut(10);
+  settings.useShortcut = keep;
+};
+document.getElementById('btnManualStart').onclick = () => {
+  if (!collectSettings()) return;
+  const si = Number(document.getElementById('manualSession').value);
+  if (!confirm(`${SESSIONS[si]}の回を今すぐ始めますか？`)) return;
+  if (si === 0) state.dayLog = [];
+  closeSettings();
+  startSessionNow(si);
+};
+document.getElementById('btnReset').onclick = () => {
+  if (!confirm('記録と状態をすべてリセットしますか？（目薬の設定は残ります）')) return;
+  state = structuredClone(DEFAULT_STATE);
+  saveState();
+  closeSettings();
+};
+
+render();
+</script>
+</body>
+</html>
